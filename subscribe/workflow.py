@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import renewal
 import utils
-from airport import AirPort
+from airport import ANOTHER_API_PREFIX, AirPort
 from logger import logger
 from origin import Origin
 from push import PushTo
@@ -40,7 +40,7 @@ class TaskConfig:
     retry: int = 3
 
     # 最高允许倍率
-    rate: float = 3.0
+    rate: float = 20.0
 
     # 标签
     tag: str = ""
@@ -64,19 +64,14 @@ class TaskConfig:
     # 是否检测节点存活状态
     liveness: bool = True
 
-    # skip-cert-verify
-    allow_insecure: bool = False
+    # 是否强制开启 tls 及阻止跳过证书验证
+    disable_insecure: bool = False
 
     # 覆盖subconverter默认exclude规则
     ignorede: bool = False
 
     # 是否允许特殊协议
     special_protocols: bool = False
-
-    # emoji 匹配规则
-    emoji_patterns: dict = None
-
-    remained: bool = False
 
     # 对于具有邮箱域名白名单且需要验证码的情况，是否使用 Gmail 别名邮箱尝试，为 True 时表示不使用
     rigid: bool = True
@@ -87,9 +82,12 @@ class TaskConfig:
     # 邀请码
     invite_code: str = ""
 
+    # 接口地址前缀，如 /api/v1/ 或 /api?scheme=
+    api_prefix: str = "/api/v1/"
+
 
 def execute(task_conf: TaskConfig) -> list:
-    if not task_conf:
+    if not task_conf or not isinstance(task_conf, TaskConfig):
         return []
 
     obj = AirPort(
@@ -101,13 +99,18 @@ def execute(task_conf: TaskConfig) -> list:
         include=task_conf.include,
         liveness=task_conf.liveness,
         coupon=task_conf.coupon,
+        api_prefix=task_conf.api_prefix,
     )
 
     logger.info(f"start fetch proxy: name=[{task_conf.name}]\tid=[{task_conf.index}]\tdomain=[{obj.ref}]")
 
     # 套餐续期
     if task_conf.renew:
-        sub_url = renewal.add_traffic_flow(domain=obj.ref, params=task_conf.renew)
+        sub_url = renewal.add_traffic_flow(
+            domain=obj.ref,
+            params=task_conf.renew,
+            jsonify=obj.api_prefix == ANOTHER_API_PREFIX,
+        )
         if sub_url and not obj.registed:
             obj.registed = True
             obj.sub = sub_url
@@ -126,12 +129,10 @@ def execute(task_conf: TaskConfig) -> list:
         rate=task_conf.rate,
         bin_name=task_conf.bin_name,
         tag=task_conf.tag,
-        allow_insecure=task_conf.allow_insecure,
+        disable_insecure=task_conf.disable_insecure,
         ignore_exclude=task_conf.ignorede,
         chatgpt=task_conf.chatgpt,
         special_protocols=task_conf.special_protocols,
-        emoji_patterns=task_conf.emoji_patterns,
-        remained=task_conf.remained,
     )
 
     logger.info(
@@ -288,7 +289,7 @@ def refresh(config: dict, push: PushTo, alives: dict, filepath: str = "", skip_r
     if invalidsubs:
         crawledsub = config.get("crawl", {}).get("persist", {}).get("subs", "")
         threshold = max(config.get("threshold", 1), 1)
-        pushconf = config.get("push", {}).get(crawledsub, {})
+        pushconf = config.get("groups", {}).get(crawledsub, {})
         if push.validate(push_conf=pushconf):
             url = push.raw_url(push_conf=pushconf)
             content = utils.http_get(url=url)

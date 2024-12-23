@@ -433,8 +433,12 @@ def url_complete(url: str, secret: bool = False) -> str:
     return url
 
 
-def load_emoji_pattern(filepath: str) -> dict:
+def load_emoji_pattern(filepath: str = "") -> dict:
     filepath = trim(filepath)
+    if not filepath:
+        workspace = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+        filepath = os.path.join(workspace, "subconverter", "snippets", "emoji.txt")
+
     if not os.path.exists(filepath) or not os.path.isfile(filepath):
         logger.warning(f"cannot parse emoji config due to file {filepath} not exists")
         return {}
@@ -466,6 +470,16 @@ def get_emoji(text: str, patterns: dict, default: str = "") -> str:
             return emoji
 
     return default
+
+
+def get_subpath(api_prefix: str, default: str = "/api/v1/") -> str:
+    path = trim(api_prefix) or trim(default) or "/api/v1/"
+    if not path.startswith("/"):
+        path = "/" + path
+    if not path.endswith("=") and not path.endswith("/"):
+        path += "/"
+
+    return path
 
 
 def multi_process_run(func: typing.Callable, tasks: list) -> list:
